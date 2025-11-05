@@ -1,0 +1,8 @@
+name: como-sonimove
+author: ""
+clients:
+  controller:
+    runtime: browser
+    default: true
+  device:
+    runtime: node
