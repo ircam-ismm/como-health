@@ -37,10 +37,11 @@ async function bootstrap() {
   const aggregatedSourceId = await como.sourceManager.createSource({
     type: 'aggregated',
     id: 'aggregate-riots',
-    sources: [riot0SourceId, riot1SourceId],
+    sources: [riot1SourceId, riot0SourceId],
   });
 
   const _playerId = await como.playerManager.createPlayer(aggregatedSourceId);
+  // const _playerId = await como.playerManager.createPlayer(aggregatedSourceId);
   // const _playerId2 = await como.playerManager.createPlayer(aggregatedSourceId);
 }
 

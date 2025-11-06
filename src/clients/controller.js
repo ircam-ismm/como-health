@@ -6,6 +6,7 @@ import { html, render, nothing } from 'lit';
 import ComoClient from '@ircam/como/ComoClient.js';
 
 import '@ircam/sc-components/sc-icon.js';
+import '@ircam/sc-components/sc-midi.js';
 
 // - General documentation: https://soundworks.dev/
 // - API documentation:     https://soundworks.dev/api
@@ -37,6 +38,7 @@ async function main($container) {
         <header>
           <h1>${client.config.app.name} | ${client.role}</h1>
           <div style="display: flex;">
+            <sc-midi></sc-midi>
             <como-project-manager .como=${como}></como-project-manager>
             <sc-icon
               type="prompt"

@@ -17,6 +17,7 @@
     "watch:sass": "sass --watch src/styles:.build/public/css"
   },
   "dependencies": {
+    "@ircam/como": "^2.0.0-beta.0",
     "@ircam/sc-components": "^3.5.0",
     "@soundworks/core": "^5.0.0",
     "@soundworks/helpers": "^5.0.0",
