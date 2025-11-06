@@ -1,4 +1,4 @@
-# `como-sonimove`
+# `como-health`
 
 Thanks for using soundworks!
 
