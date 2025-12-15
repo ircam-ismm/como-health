@@ -40,9 +40,9 @@ async function bootstrap() {
     sources: [riot1SourceId, riot0SourceId],
   });
 
-  const _playerId = await como.playerManager.createPlayer(aggregatedSourceId);
-  // const _playerId = await como.playerManager.createPlayer(aggregatedSourceId);
-  // const _playerId2 = await como.playerManager.createPlayer(aggregatedSourceId);
+  const playerId = await como.playerManager.createPlayer(aggregatedSourceId);
+  const player = await como.playerManager.getPlayer(playerId);
+  // await player.setScript('test-layer-synth.js');
 }
 
 // The launcher allows to launch multiple clients in the same terminal window

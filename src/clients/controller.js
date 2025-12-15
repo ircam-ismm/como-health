@@ -51,7 +51,7 @@ async function main($container) {
         <section>
           <como-session-manager expanded .como=${como}></como-session-manager>
           <como-source-manager .como=${como}></como-source-manager>
-          <como-player-manager .como=${como}></como-player-manager>
+          <como-player-manager .como=${como} expanded></como-player-manager>
           ${controller.get('showEditScriptPanel')
             ? html`<como-script-manager .como=${como}></como-script-manager>`
             : nothing
