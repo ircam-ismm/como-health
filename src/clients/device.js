@@ -41,8 +41,10 @@ async function bootstrap() {
   });
 
   const playerId = await como.playerManager.createPlayer(aggregatedSourceId);
+  // const playerSingle = await como.playerManager.createPlayer(riot0SourceId);
+
   const player = await como.playerManager.getPlayer(playerId);
-  // await player.setScript('test-layer-synth.js');
+  await player.setScript('xmm-test.js');
 }
 
 // The launcher allows to launch multiple clients in the same terminal window
