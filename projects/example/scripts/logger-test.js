@@ -4,6 +4,10 @@ const {
   como,
 } = getGlobalScriptingContext();
 
+import {
+  getTime
+} from '@ircam/sc-utils';
+
 import { add } from './lib/add.js';
 
 export async function defineSharedState(como) {
@@ -68,6 +72,9 @@ export async function exit(context) {
 }
 
 export async function process(context, frame) {
-  const { state } = context;
-  console.log('process', frame);
+  frame.timestamp = getTime();
+  writer.write(frame);
+
+  // const { state } = context;
+  // console.log('process', frame);
 }

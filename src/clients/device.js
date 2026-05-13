@@ -20,29 +20,14 @@ async function bootstrap() {
   const como = new ComoClient(client);
   await como.start();
 
-  const riot0SourceId = await como.sourceManager.createSource({
-    type: 'riot',
+  const comote = await como.sourceManager.createSource({
+    type: 'comote',
     id: '0',
     port: OSC_PORT,
     verbose: false,
   });
 
-  const riot1SourceId = await como.sourceManager.createSource({
-    type: 'riot',
-    id: '1',
-    port: OSC_PORT,
-    verbose: false,
-  });
-
-  const aggregatedSourceId = await como.sourceManager.createSource({
-    type: 'aggregated',
-    id: 'aggregate-riots',
-    sources: [riot1SourceId, riot0SourceId],
-  });
-
-  const playerId = await como.playerManager.createPlayer(aggregatedSourceId);
-  // const playerSingle = await como.playerManager.createPlayer(riot0SourceId);
-
+  const playerId = await como.playerManager.createPlayer(comote);
   const player = await como.playerManager.getPlayer(playerId);
   await player.setScript('xmm-test.js');
 }

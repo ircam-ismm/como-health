@@ -15,7 +15,7 @@ import ComoServer from '@ircam/como/ComoServer.js';
 const config = loadConfig(process.env.ENV, import.meta.url);
 
 const PROJECTS_DIRNAME = 'projects';
-const DEFAULT_PROJECT = process.env.PROJECT || 'default';
+const DEFAULT_PROJECT = process.env.PROJECT || 'example';
 
 console.log(`
 --------------------------------------------------------

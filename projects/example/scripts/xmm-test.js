@@ -1,3 +1,7 @@
+import {
+  Hysteresis
+} from '@ircam/sc-signal';
+
 const {
   audioContext,
   audioBufferLoader,
@@ -33,16 +37,96 @@ export async function defineSharedState(como) {
 
 let labels = null;
 let model = null;
-let currentLabel = null; // the label that is currently played
-let previewLabel = null; // bypass decoded label to preview some soundfile
 let recordExample = null; // array containing the example when record is true
-let src = null;
+let previewLabel = null; // bypass decoded label to preview some soundfile
+let previewSrc = null;
+let unsubscribeModel = null;
+
+class ParallelSynth {
+  constructor(audioContext, soundbank, model) {
+    this.audioContext = audioContext;
+    this.soundbank = soundbank;
+    this.model = model;
+    this.output = new GainNode(this.audioContext);
+    this.sources = {};
+
+    this.unsubscribe = this.model.state.onUpdate(updates => {
+      if ('parameters' in updates) {
+        const classes = Object.keys(updates.parameters.classes);
+        const sources = Object.keys(this.sources);
+        const toAdd = classes.filter(label => !sources.includes(label));
+        const toRemove = sources.filter(label => !classes.includes(label));
+
+        toAdd.forEach(label => {
+          const buffer = this.soundbank[label];
+          const src = new AudioBufferSourceNode(this.audioContext, { buffer, loop: true });
+          const env = new GainNode(this.audioContext, { gain: 0 });
+          src.connect(env).connect(this.output);
+          src.start();
+
+          const hysteresis = new Hysteresis({
+            sampleRate: 2, // normalised frequency
+            lowpassFrequencyUp: 0.5,
+            lowpassFrequencyDown: 0.05,
+          });
+
+          this.sources[label] = { src, env, hysteresis };
+        });
+
+        toRemove.forEach(label => {
+          const { src, env } = this.sources[label];
+          src.stop();
+          src.disconnect();
+          env.disconnect();
+          delete this.sources[label];
+        });
+      }
+    }, true);
+  }
+
+  delete() {
+    this.unsubscribe();
+  }
+
+  fadeIn() {
+    this.output.gain.setTargetAtTime(1, this.audioContext.currentTime, 0.005);
+  }
+
+  fadeOut() {
+    this.output.gain.setTargetAtTime(0, this.audioContext.currentTime, 0.005);
+  }
+
+  connect(destination) {
+    this.output.connect(destination);
+  }
+
+  disconnect() {
+    this.output.disconnect();
+  }
+
+  process(results) {
+    const { labels, smoothedNormalizedLikelihoods } = results;
+
+    labels.forEach((label, index) => {
+      const { env, hysteresis } = this.sources[label];
+      const likelihood = smoothedNormalizedLikelihoods[index]
+      const gain = hysteresis.process(likelihood);
+      env.gain.setTargetAtTime(gain, this.audioContext.currentTime, 0.005);
+    });
+    // console.log(results);
+  }
+}
+
+let parallelSynth = null;
 
 export async function enter(context) {
   const { output, state, soundbank, scriptName } = context;
 
   labels = Object.keys(soundbank);
-  model = await como.modelManager.getModel('test');
+  model = await como.modelManager.getModel('test'); // session.id
+
+  parallelSynth = new ParallelSynth(audioContext, soundbank, model);
+  parallelSynth.connect(output);
 
   console.log(`> model "${model.state.get('id')}" loaded`, model.state.get('infos'));
 
@@ -72,15 +156,17 @@ export async function exit(context) {
   const { output, state, soundbank, scriptName } = context;
   console.log('xmm-test exit()');
 
-  if (src) {
-    src.stop();
+  if (parallelSynth) {
+    parallelSynth.disconnect();
+    parallelSynth.delete();
   }
 }
 
 export async function process(context, frame) {
   const { output, state, soundbank, scriptName } = context;
   // console.log('xmm-test process()');
-  let label = false;
+  let forceLabel = null;
+  let results = null;
 
   // motion stream processsing and packing
   const xmmFrame = [
@@ -89,41 +175,35 @@ export async function process(context, frame) {
     frame[0].accelerometer.z,
   ];
 
-  // preview, record & run logic
-  const previewLabel = state.get('previewLabel') || null; // force empty string to null (workaround simple gui)
-
+  // handle preview, record and process logic
   if (state.get('record')) {
-    console.log('record');
-    label = state.get('recordLabel');
+    forceLabel = state.get('recordLabel') || null;
     recordExample.push(xmmFrame);
   } else {
-    const result = model.process(xmmFrame);
-    label = result ? result.likeliest : null;
+    results = model.process(xmmFrame);
   }
   // if preview is enabled, we still want to possibly record
-  if (previewLabel !== null) {
-    label = previewLabel;
+  if (state.get('previewLabel')) {
+    forceLabel = state.get('previewLabel') || null;
   }
 
   // audio synthesis
-  if (label !== currentLabel) {
-    currentLabel = label;
-    console.log('label changed', currentLabel)
-    if (src) {
-      src.stop();
-      src = null;
+  if (forceLabel && forceLabel !== previewLabel) {
+    previewLabel = forceLabel;
+    parallelSynth.fadeOut();
+
+    if (previewSource) {
+      previewSource.stop();
+      previewSource = null;
     }
 
-    if (currentLabel) {
-      if (labels.includes(currentLabel)) {
-        const buffer = soundbank[currentLabel];
-        console.log('play:', currentLabel, buffer);
-        src = new AudioBufferSourceNode(audioContext, { buffer, loop: true });
-        src.connect(output);
-        src.start();
-      } else {
-        console.log(`Didn't find ${label} in soundbank`);
-      }
-    }
+    const buffer = soundbank[currentLabel];
+    previewSource = new AudioBufferSourceNode(audioContext, { buffer, loop: true });
+    previewSource.connect(output);
+    previewSource.start();
+  } else {
+    previewLabel = null;
+    parallelSynth.fadeIn();
+    parallelSynth.process(results);
   }
 }
