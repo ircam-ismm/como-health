@@ -11,20 +11,54 @@ const {
 export async function defineSharedState(como) {
   return {
     classDescription: {
+      modelId: {
+        type: 'string',
+        default: null,
+        nullable: true,
+        metas: {
+          gui: "<como-model-admin .como=${como} model-id=${state.get('modelId')}></como-model-admin>"
+        }
+      },
       labels: {
         type: 'any',
         default: [],
+        metas: { gui: `` }
       },
       previewLabel: {
         type: 'string',
-        // default: '08-clicks.mp3',
         default: null,
         nullable: true,
+        metas: {
+          gui: `
+            <div>
+              <sc-text>previewLabel</sc-text>
+              <sc-select
+                placeholder="none"
+                value=\${state.get('previewLabel') || ''}
+                .options=\${state.get('labels')}
+                @change=\${e => state.set({ previewLabel: e.detail.value || null })}
+              ></sc-select>
+            </div>
+          `,
+        }
       },
       recordLabel: {
         type: 'string',
         default: null,
         nullable: true,
+        metas: {
+          gui: `
+            <div>
+              <sc-text>recordLabel</sc-text>
+              <sc-select
+                placeholder="none"
+                value=\${state.get('recordLabel') || ''}
+                .options=\${state.get('labels')}
+                @change=\${e => state.set({ recordLabel: e.detail.value || null })}
+              ></sc-select>
+            </div>
+          `,
+        }
       },
       record: {
         type: 'boolean',
@@ -42,7 +76,7 @@ let previewLabel = null; // bypass decoded label to preview some soundfile
 let previewSrc = null;
 let unsubscribeModel = null;
 
-class ParallelSynth {
+class XmmParallelSynth {
   constructor(audioContext, soundbank, model) {
     this.audioContext = audioContext;
     this.soundbank = soundbank;
@@ -67,7 +101,7 @@ class ParallelSynth {
           const hysteresis = new Hysteresis({
             sampleRate: 2, // normalised frequency
             lowpassFrequencyUp: 0.5,
-            lowpassFrequencyDown: 0.05,
+            lowpassFrequencyDown: 0.1,
           });
 
           this.sources[label] = { src, env, hysteresis };
@@ -113,20 +147,23 @@ class ParallelSynth {
       const gain = hysteresis.process(likelihood);
       env.gain.setTargetAtTime(gain, this.audioContext.currentTime, 0.005);
     });
-    // console.log(results);
   }
 }
 
-let parallelSynth = null;
+let synth = null;
+// using session.id as model id can make the script dynamic and behave just like
+// como elements
+const modelId = 'test';
 
 export async function enter(context) {
   const { output, state, soundbank, scriptName } = context;
 
   labels = Object.keys(soundbank);
-  model = await como.modelManager.getModel('test'); // session.id
+  model = await como.modelManager.getModel(modelId);
+  await state.set({ modelId });
 
-  parallelSynth = new ParallelSynth(audioContext, soundbank, model);
-  parallelSynth.connect(output);
+  synth = new XmmParallelSynth(audioContext, soundbank, model);
+  synth.connect(output);
 
   console.log(`> model "${model.state.get('id')}" loaded`, model.state.get('infos'));
 
@@ -154,11 +191,14 @@ export async function enter(context) {
 
 export async function exit(context) {
   const { output, state, soundbank, scriptName } = context;
-  console.log('xmm-test exit()');
 
-  if (parallelSynth) {
-    parallelSynth.disconnect();
-    parallelSynth.delete();
+  if (synth) {
+    synth.disconnect();
+    synth.delete();
+  }
+
+  if (previewSrc) {
+    previewSrc.stop();
   }
 }
 
@@ -168,42 +208,50 @@ export async function process(context, frame) {
   let forceLabel = null;
   let results = null;
 
-  // motion stream processsing and packing
+  // motion stream processing and packing
   const xmmFrame = [
     frame[0].accelerometer.x,
     frame[0].accelerometer.y,
     frame[0].accelerometer.z,
   ];
 
-  // handle preview, record and process logic
+  // if preview is enabled, we still want to possibly record
+  if (state.get('previewLabel')) {
+    forceLabel = state.get('previewLabel') || null;
+  }
+
+  // if in record mode, has precedence over preview label
   if (state.get('record')) {
     forceLabel = state.get('recordLabel') || null;
     recordExample.push(xmmFrame);
   } else {
     results = model.process(xmmFrame);
   }
-  // if preview is enabled, we still want to possibly record
-  if (state.get('previewLabel')) {
-    forceLabel = state.get('previewLabel') || null;
-  }
 
   // audio synthesis
-  if (forceLabel && forceLabel !== previewLabel) {
-    previewLabel = forceLabel;
-    parallelSynth.fadeOut();
+  if (forceLabel) {
+    if (forceLabel !== previewLabel) {
+      previewLabel = forceLabel;
+      synth.fadeOut();
 
-    if (previewSource) {
-      previewSource.stop();
-      previewSource = null;
+      if (previewSrc) {
+        previewSrc.stop();
+        previewSrc = null;
+      }
+
+      const buffer = soundbank[previewLabel];
+      previewSrc = new AudioBufferSourceNode(audioContext, { buffer, loop: true });
+      previewSrc.connect(output);
+      previewSrc.start();
+    }
+  } else if (results) {
+    if (previewSrc) {
+      previewSrc.stop();
+      previewSrc = null;
     }
 
-    const buffer = soundbank[currentLabel];
-    previewSource = new AudioBufferSourceNode(audioContext, { buffer, loop: true });
-    previewSource.connect(output);
-    previewSource.start();
-  } else {
     previewLabel = null;
-    parallelSynth.fadeIn();
-    parallelSynth.process(results);
+    synth.fadeIn();
+    synth.process(results);
   }
 }
